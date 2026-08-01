@@ -7,6 +7,7 @@ from PyQt6.QtGui import QFont, QIcon
 from views.refugios_view import RefugiosView
 from views.familias_view import FamiliasView
 from views.inventario_view import InventarioView
+from views.solicitudes_view import SolicitudesView
 
 class PlaceholderView(QWidget):
     """
@@ -102,15 +103,17 @@ class MainWindow(QMainWindow):
         # Instanciar la vista de la Fase 3
         self.inventario_view = InventarioView()
 
+        # Instanciar la vista de la Fase 4
+        self.solicitudes_view = SolicitudesView()
+
         # Instanciar placeholders para otras fases
-        self.solicitudes_placeholder = PlaceholderView("Solicitudes Semanales")
         self.reportes_placeholder = PlaceholderView("Reportes Excel")
 
         # Añadir al stacked widget
         self.stacked_widget.addWidget(self.refugios_view)
         self.stacked_widget.addWidget(self.familias_view)
         self.stacked_widget.addWidget(self.inventario_view)
-        self.stacked_widget.addWidget(self.solicitudes_placeholder)
+        self.stacked_widget.addWidget(self.solicitudes_view)
         self.stacked_widget.addWidget(self.reportes_placeholder)
 
         # Añadir componentes al layout principal
@@ -134,3 +137,8 @@ class MainWindow(QMainWindow):
         elif index == 2:
             self.inventario_view.cargar_categorias_combo()
             self.inventario_view.cargar_inventario()
+        # Si se cambia a la vista de solicitudes, refrescar semanas, refugios y productos
+        elif index == 3:
+            self.solicitudes_view.cargar_semanas()
+            self.solicitudes_view.cargar_refugios()
+            self.solicitudes_view.cargar_productos_inventario()
