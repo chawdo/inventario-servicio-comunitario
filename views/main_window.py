@@ -8,6 +8,7 @@ from views.refugios_view import RefugiosView
 from views.familias_view import FamiliasView
 from views.inventario_view import InventarioView
 from views.solicitudes_view import SolicitudesView
+from views.reportes_view import ReportesView
 
 class PlaceholderView(QWidget):
     """
@@ -106,15 +107,15 @@ class MainWindow(QMainWindow):
         # Instanciar la vista de la Fase 4
         self.solicitudes_view = SolicitudesView()
 
-        # Instanciar placeholders para otras fases
-        self.reportes_placeholder = PlaceholderView("Reportes Excel")
+        # Instanciar la vista de la Fase 5 (Reportes)
+        self.reportes_view = ReportesView()
 
         # Añadir al stacked widget
         self.stacked_widget.addWidget(self.refugios_view)
         self.stacked_widget.addWidget(self.familias_view)
         self.stacked_widget.addWidget(self.inventario_view)
         self.stacked_widget.addWidget(self.solicitudes_view)
-        self.stacked_widget.addWidget(self.reportes_placeholder)
+        self.stacked_widget.addWidget(self.reportes_view)
 
         # Añadir componentes al layout principal
         main_layout.addWidget(self.sidebar)
@@ -142,3 +143,8 @@ class MainWindow(QMainWindow):
             self.solicitudes_view.cargar_semanas()
             self.solicitudes_view.cargar_refugios()
             self.solicitudes_view.cargar_productos_inventario()
+        # Si se cambia a la vista de reportes, refrescar semanas, refugios y vista previa
+        elif index == 4:
+            self.reportes_view.cargar_semanas()
+            self.reportes_view.cargar_refugios()
+            self.reportes_view.cargar_vista_previa()
