@@ -1,0 +1,1 @@
+Este es un proyecto de aplicación de escritorio. Usaremos Python con SQLite y PyQt para la interfaz gráfica. Siempre que crees un componente, hazlo modular. Toda tabla debe incluir claves primarias e índices. Para exportar a Excel usa la librería pandas o openpyxl.
