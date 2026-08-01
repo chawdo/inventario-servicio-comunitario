@@ -42,16 +42,19 @@ class TestControllers(unittest.TestCase):
         self.patcher_fam = patch('controllers.familia_controller.get_connection', return_value=self.wrapper_conn)
         self.patcher_inv = patch('controllers.inventario_controller.get_connection', return_value=self.wrapper_conn)
         self.patcher_sol = patch('controllers.solicitud_controller.get_connection', return_value=self.wrapper_conn)
+        self.patcher_rep = patch('controllers.reporte_controller.get_connection', return_value=self.wrapper_conn)
         self.patcher.start()
         self.patcher_fam.start()
         self.patcher_inv.start()
         self.patcher_sol.start()
+        self.patcher_rep.start()
 
     def tearDown(self):
         self.patcher.stop()
         self.patcher_fam.stop()
         self.patcher_inv.stop()
         self.patcher_sol.stop()
+        self.patcher_rep.stop()
         self.real_conn.close()
 
     def test_crear_y_obtener_refugio(self):
@@ -397,6 +400,87 @@ class TestControllers(unittest.TestCase):
         # Nombre manual vacío
         with self.assertRaises(ValueError):
             SolicitudController.crear_solicitud_con_detalles(sem_id, fam_id, "", [{"en_inventario": False, "nombre_producto_manual": "", "cantidad_solicitada": 1.0, "unidad_medida_solicitada": "u"}])
+
+    def test_obtener_reporte_y_exportar_excel(self):
+        # Setup refugio, familia, integrantes, categoría, producto y semana
+        ref_id = RefugioController.crear_refugio("Refugio Reportes", "Dirección", "Encargado", 50)
+        fam_id = FamiliaController.crear_familia(ref_id, "FAM-R01", "Familia Reportes")
+
+        # Integrantes
+        FamiliaController.agregar_integrante(fam_id, "Esteban", "Quito", 30, "M", "")
+
+        cat_id = InventarioController.crear_categoria("Alimentos", "Comida")
+        prod_id = InventarioController.crear_producto(
+            categoria_id=cat_id,
+            nombre="Harina PAN",
+            empaque_unidad="Bulto",
+            tamano_unidad_peso=20.0,
+            unidad_medida="kg",
+            stock_unidades=15.0,
+            precio_unidad=15.00
+        )
+        sem_id = SolicitudController.crear_semana("Semana 1 - Agosto 2026", "2026-08-01", "2026-08-07")
+
+        # Crear solicitud con producto de inventario
+        items = [{
+            "producto_id": prod_id,
+            "nombre_producto_manual": None,
+            "cantidad_solicitada": 3.0,
+            "unidad_medida_solicitada": "kg",
+            "en_inventario": True
+        }]
+
+        SolicitudController.crear_solicitud_con_detalles(
+            semana_id=sem_id,
+            familia_id=fam_id,
+            observaciones="Entrega",
+            items=items
+        )
+
+        # Importamos el nuevo controlador
+        from controllers.reporte_controller import ReporteController
+
+        # 1. Obtener datos de reporte para la semana
+        datos = ReporteController.obtener_datos_reporte(semana_id=sem_id)
+        self.assertEqual(len(datos), 1)
+        self.assertEqual(datos[0]["Semana"], "Semana 1 - Agosto 2026")
+        self.assertEqual(datos[0]["Refugio"], "Refugio Reportes")
+        self.assertEqual(datos[0]["Código Familia"], "FAM-R01")
+        self.assertEqual(datos[0]["Familia"], "Familia Reportes")
+        self.assertEqual(datos[0]["Nombre Integrante"], "Esteban Quito")
+        self.assertEqual(datos[0]["Edad"], 30)
+        self.assertEqual(datos[0]["Sexo"], "M")
+        self.assertEqual(datos[0]["Producto Solicitado"], "Harina PAN")
+        self.assertEqual(datos[0]["Cantidad"], 3.0)
+        self.assertEqual(datos[0]["Unidad"], "kg")
+        self.assertEqual(datos[0]["Disponibilidad en Inventario"], "Sí")
+
+        # 2. Con filtro de refugio que existe
+        datos_filtro_si = ReporteController.obtener_datos_reporte(semana_id=sem_id, refugio_id=ref_id)
+        self.assertEqual(len(datos_filtro_si), 1)
+
+        # 3. Con filtro de refugio que no existe (debe dar vacío)
+        datos_filtro_no = ReporteController.obtener_datos_reporte(semana_id=sem_id, refugio_id=999)
+        self.assertEqual(len(datos_filtro_no), 0)
+
+        # 4. Probar exportación a Excel
+        import tempfile
+        import os
+        with tempfile.TemporaryDirectory() as tmpdir:
+            temp_excel_path = os.path.join(tmpdir, "reporte_test.xlsx")
+            ReporteController.exportar_a_excel(semana_id=sem_id, refugio_id=None, filepath=temp_excel_path)
+
+            # Verificar existencia y tamaño del archivo
+            self.assertTrue(os.path.exists(temp_excel_path))
+            self.assertTrue(os.path.getsize(temp_excel_path) > 0)
+
+            # Cargar con pandas para verificar que tenga las columnas esperadas
+            import pandas as pd
+            df_loaded = pd.read_excel(temp_excel_path)
+            self.assertEqual(len(df_loaded), 1)
+            self.assertEqual(df_loaded.iloc[0]["Semana"], "Semana 1 - Agosto 2026")
+            self.assertEqual(df_loaded.iloc[0]["Nombre Integrante"], "Esteban Quito")
+            self.assertEqual(df_loaded.iloc[0]["Disponibilidad en Inventario"], "Sí")
 
 
 if __name__ == "__main__":
