@@ -448,13 +448,12 @@ class TestControllers(unittest.TestCase):
         self.assertEqual(datos[0]["Refugio"], "Refugio Reportes")
         self.assertEqual(datos[0]["Código Familia"], "FAM-R01")
         self.assertEqual(datos[0]["Familia"], "Familia Reportes")
-        self.assertEqual(datos[0]["Nombre Integrante"], "Esteban Quito")
-        self.assertEqual(datos[0]["Edad"], 30)
-        self.assertEqual(datos[0]["Sexo"], "M")
+        self.assertEqual(datos[0]["Total Integrantes"], 1)
+        self.assertEqual(datos[0]["Resumen Demográfico"], "1M / 0F (1 Adulto)")
         self.assertEqual(datos[0]["Producto Solicitado"], "Harina PAN")
         self.assertEqual(datos[0]["Cantidad"], 3.0)
         self.assertEqual(datos[0]["Unidad"], "kg")
-        self.assertEqual(datos[0]["Disponibilidad en Inventario"], "Sí")
+        self.assertEqual(datos[0]["Disponibilidad en Inventario (Sí / No)"], "Sí")
 
         # 2. Con filtro de refugio que existe
         datos_filtro_si = ReporteController.obtener_datos_reporte(semana_id=sem_id, refugio_id=ref_id)
@@ -480,8 +479,8 @@ class TestControllers(unittest.TestCase):
             df_loaded = pd.read_excel(temp_excel_path)
             self.assertEqual(len(df_loaded), 1)
             self.assertEqual(df_loaded.iloc[0]["Semana"], "Semana 1 - Agosto 2026")
-            self.assertEqual(df_loaded.iloc[0]["Nombre Integrante"], "Esteban Quito")
-            self.assertEqual(df_loaded.iloc[0]["Disponibilidad en Inventario"], "Sí")
+            self.assertEqual(df_loaded.iloc[0]["Resumen Demográfico"], "1M / 0F (1 Adulto)")
+            self.assertEqual(df_loaded.iloc[0]["Disponibilidad en Inventario (Sí / No)"], "Sí")
 
     def test_editar_y_eliminar_refugios_y_familias(self):
         # 1. Crear refugio
@@ -575,6 +574,7 @@ class TestControllers(unittest.TestCase):
         fam_id = FamiliaController.crear_familia(ref_id, "FAM-MULTI", "Familia Multimiembros")
 
         # 3 integrantes
+        # Edades: 30 (Adulto >= 12), 28 (Adulto >= 12), 5 (Niño < 12)
         FamiliaController.agregar_integrante(fam_id, "Juan", "Pérez", 30, "M", "")
         FamiliaController.agregar_integrante(fam_id, "María", "Pérez", 28, "F", "")
         FamiliaController.agregar_integrante(fam_id, "Pedro", "Pérez", 5, "M", "")
@@ -613,10 +613,12 @@ class TestControllers(unittest.TestCase):
         self.assertEqual(datos[0]["Producto Solicitado"], "Leche")
         self.assertEqual(datos[0]["Cantidad"], 1.0)
 
-        # Verificar formato de concatenación solicitado: "Juan (30M), María (28F), Pedro (5M) | Total: 3"
-        self.assertEqual(datos[0]["Nombre Integrante"], "Juan (30M), María (28F), Pedro (5M) | Total: 3")
-        self.assertEqual(datos[0]["Edad"], "")
-        self.assertEqual(datos[0]["Sexo"], "")
+        # Verificar formato de resumen demográfico solicitado
+        # 2 machos, 1 hembra -> 2M / 1F
+        # Edad: Pedro (5) -> < 12 (Niño), Juan y María -> 12-59 (Adultos)
+        # Resumen demográfico: "2M / 1F (1 Niño, 2 Adultos)"
+        self.assertEqual(datos[0]["Total Integrantes"], 3)
+        self.assertEqual(datos[0]["Resumen Demográfico"], "2M / 1F (1 Niño, 2 Adultos)")
 
 
 if __name__ == "__main__":

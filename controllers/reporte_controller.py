@@ -12,12 +12,13 @@ class ReporteController:
     def obtener_datos_reporte(semana_id: int, refugio_id: Optional[int] = None) -> List[Dict[str, Any]]:
         """
         Ejecuta la consulta de solicitudes de forma agrupada por producto pedido por la familia
-        (evitando el producto cartesiano), y concatena los integrantes de la familia en una sola columna.
+        (evitando el producto cartesiano), calculando a nivel de familia los integrantes totales,
+        desglose por sexo y rango de edad en una sola columna.
         """
         conn = get_connection()
         cursor = conn.cursor()
 
-        # Consulta base (sin LEFT JOIN a integrantes para evitar producto cartesiano)
+        # Consulta SQL con LEFT JOIN a una subconsulta agrupada de integrantes para obtener demográficos sin duplicar filas
         query = """
         SELECT
             s.nombre_semana AS "Semana",
@@ -30,14 +31,32 @@ class ReporteController:
             CASE
                 WHEN ds.en_inventario = 1 THEN 'Sí'
                 ELSE 'No'
-            END AS "Disponibilidad en Inventario",
-            f.id AS "FamiliaID"
+            END AS "Disponibilidad en Inventario (Sí / No)",
+            f.id AS "FamiliaID",
+            COALESCE(demog.total_integrantes, 0) AS "Total Integrantes",
+            COALESCE(demog.males, 0) AS "Males",
+            COALESCE(demog.females, 0) AS "Females",
+            COALESCE(demog.ninos, 0) AS "Ninos",
+            COALESCE(demog.adultos, 0) AS "Adultos",
+            COALESCE(demog.adultos_mayores, 0) AS "AdultosMayores"
         FROM solicitudes sol
         INNER JOIN semanas s ON sol.semana_id = s.id
         INNER JOIN familias f ON sol.familia_id = f.id
         INNER JOIN refugios r ON f.refugio_id = r.id
         INNER JOIN detalles_solicitud ds ON ds.solicitud_id = sol.id
         LEFT JOIN productos p ON ds.producto_id = p.id
+        LEFT JOIN (
+            SELECT
+                familia_id,
+                COUNT(id) AS total_integrantes,
+                SUM(CASE WHEN sexo = 'M' THEN 1 ELSE 0 END) AS males,
+                SUM(CASE WHEN sexo = 'F' THEN 1 ELSE 0 END) AS females,
+                SUM(CASE WHEN edad < 12 THEN 1 ELSE 0 END) AS ninos,
+                SUM(CASE WHEN edad >= 12 AND edad <= 59 THEN 1 ELSE 0 END) AS adultos,
+                SUM(CASE WHEN edad >= 60 THEN 1 ELSE 0 END) AS adultos_mayores
+            FROM integrantes
+            GROUP BY familia_id
+        ) demog ON demog.familia_id = f.id
         WHERE s.id = ?
         """
 
@@ -53,51 +72,37 @@ class ReporteController:
             rows = cursor.fetchall()
 
             reporte = []
-            members_cache = {}  # Cache para optimizar las consultas de integrantes por familia
 
             for row in rows:
-                semana, refugio, cod_familia, familia, prod_solicitado, cantidad, unidad, en_inventario, familia_id = row
+                (semana, refugio, cod_familia, familia, prod_solicitado, cantidad, unidad,
+                 en_inventario, familia_id, total_integrantes, males, females, ninos, adultos, adultos_mayores) = row
 
-                # Obtener o consultar los integrantes de esta familia
-                if familia_id not in members_cache:
-                    cursor.execute("""
-                        SELECT nombres, apellidos, edad, sexo
-                        FROM integrantes
-                        WHERE familia_id = ?
-                        ORDER BY id ASC
-                    """, (familia_id,))
-                    members_cache[familia_id] = cursor.fetchall()
+                # Formatear el Resumen Demográfico
+                sex_str = f"{males}M / {females}F"
+                age_parts = []
+                if ninos > 0:
+                    age_parts.append(f"{ninos} Niño" if ninos == 1 else f"{ninos} Niños")
+                if adultos > 0:
+                    age_parts.append(f"{adultos} Adulto" if adultos == 1 else f"{adultos} Adultos")
+                if adultos_mayores > 0:
+                    age_parts.append(f"{adultos_mayores} Adulto Mayor" if adultos_mayores == 1 else f"{adultos_mayores} Adultos Mayores")
 
-                integrantes = members_cache[familia_id]
-
-                # Formatear la columna de integrante, edad y sexo de acuerdo al número de integrantes
-                if len(integrantes) == 1:
-                    nombre_integrante = f"{integrantes[0][0]} {integrantes[0][1]}"
-                    edad = integrantes[0][2]
-                    sexo = integrantes[0][3]
-                elif len(integrantes) > 1:
-                    # Concatena en formato: Juan (30M), María (28F) | Total: 2
-                    parts = [f"{m[0]} ({m[2]}{m[3]})" for m in integrantes]
-                    nombre_integrante = f"{', '.join(parts)} | Total: {len(integrantes)}"
-                    edad = ""
-                    sexo = ""
+                if age_parts:
+                    resumen_demografico = f"{sex_str} ({', '.join(age_parts)})"
                 else:
-                    nombre_integrante = ""
-                    edad = ""
-                    sexo = ""
+                    resumen_demografico = sex_str
 
                 reporte.append({
                     "Semana": semana or "",
                     "Refugio": refugio or "",
                     "Código Familia": cod_familia or "",
                     "Familia": familia or "",
-                    "Nombre Integrante": nombre_integrante,
-                    "Edad": edad,
-                    "Sexo": sexo,
+                    "Total Integrantes": total_integrantes,
+                    "Resumen Demográfico": resumen_demografico,
                     "Producto Solicitado": prod_solicitado or "",
                     "Cantidad": cantidad if cantidad is not None else 0.0,
                     "Unidad": unidad or "",
-                    "Disponibilidad en Inventario": en_inventario or "No"
+                    "Disponibilidad en Inventario (Sí / No)": en_inventario or "No"
                 })
 
             return reporte
@@ -119,8 +124,8 @@ class ReporteController:
 
         # 2. Crear DataFrame de pandas
         columnas = [
-            "Semana", "Refugio", "Código Familia", "Familia", "Nombre Integrante",
-            "Edad", "Sexo", "Producto Solicitado", "Cantidad", "Unidad", "Disponibilidad en Inventario"
+            "Semana", "Refugio", "Código Familia", "Familia", "Total Integrantes",
+            "Resumen Demográfico", "Producto Solicitado", "Cantidad", "Unidad", "Disponibilidad en Inventario (Sí / No)"
         ]
 
         df = pd.DataFrame(datos, columns=columnas)
@@ -157,8 +162,8 @@ class ReporteController:
             data_alignment_center = Alignment(horizontal="center", vertical="center")
             data_alignment_left = Alignment(horizontal="left", vertical="center")
 
-            # Centrar ciertas columnas como Semana, Código, Edad, Sexo, Unidad, Disponibilidad
-            center_columns = {1, 3, 6, 7, 10, 11}
+            # Centrar ciertas columnas como Semana, Código, Total Integrantes, Unidad, Disponibilidad
+            center_columns = {1, 3, 5, 9, 10}
 
             for row_idx in range(2, len(df) + 2):
                 for col_idx in range(1, len(columnas) + 1):
