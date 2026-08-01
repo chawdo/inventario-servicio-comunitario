@@ -1,0 +1,10 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Databases
+# Note: Keep refugios.db gitignored to let developers generate it fresh via seed_data.py
+# (We will ignore or keep it, let's keep it ignored so that it does not bloat repository)
+database/refugios.db
