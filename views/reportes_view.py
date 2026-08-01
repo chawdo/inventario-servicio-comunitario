@@ -59,8 +59,8 @@ class ReportesView(QWidget):
 
         self.table_preview = QTableWidget()
         self.columnas = [
-            "Semana", "Refugio", "Código Familia", "Familia", "Nombre Integrante",
-            "Edad", "Sexo", "Producto Solicitado", "Cantidad", "Unidad", "Disponibilidad en Inventario"
+            "Semana", "Refugio", "Código Familia", "Familia", "Total Integrantes",
+            "Resumen Demográfico", "Producto Solicitado", "Cantidad", "Unidad", "Disponibilidad en Inventario (Sí / No)"
         ]
         self.table_preview.setColumnCount(len(self.columnas))
         self.table_preview.setHorizontalHeaderLabels(self.columnas)

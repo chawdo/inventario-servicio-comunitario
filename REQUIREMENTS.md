@@ -48,13 +48,12 @@ Aplicación de escritorio para la gestión logística de refugios humanitarios, 
   2. `Refugio`
   3. `Código/Número de Familia`
   4. `Nombre de Familia`
-  5. `Integrante` (Nombre y Apellido)
-  6. `Edad`
-  7. `Sexo`
-  8. `Producto Solicitado`
-  9. `Cantidad Entregada`
-  10. `Unidad de Medida`
-  11. `Disponibilidad en Inventario` (**Sí** / **No** según el estado de `en_inventario`).
+  5. `Total Integrantes` (Conteo total de miembros de esa familia)
+  6. `Resumen Demográfico` (Desglose por sexo y rango de edad: Ej. 2M / 3F (1 Niño, 4 Adultos))
+  7. `Producto Solicitado`
+  8. `Cantidad Entregada`
+  9. `Unidad de Medida`
+  10. `Disponibilidad en Inventario` (**Sí** / **No** según el estado de `en_inventario`).
 
 ---
 
@@ -134,22 +133,36 @@ SELECT
     r.nombre AS "Refugio",
     f.codigo_numero AS "Código Familia",
     f.nombre_representativo AS "Familia",
-    (i.nombres || ' ' || i.apellidos) AS "Integrante",
-    i.edad AS "Edad",
-    i.sexo AS "Sexo",
     COALESCE(p.nombre, ds.nombre_producto_manual) AS "Producto Solicitado",
     ds.cantidad_solicitada AS "Cantidad",
     ds.unidad_medida_solicitada AS "Unidad",
     CASE 
         WHEN ds.en_inventario = 1 THEN 'Sí'
         ELSE 'No'
-    END AS "Disponibilidad en Inventario"
+    END AS "Disponibilidad en Inventario (Sí / No)",
+    COALESCE(demog.total_integrantes, 0) AS "Total Integrantes",
+    COALESCE(demog.males, 0) AS "Males",
+    COALESCE(demog.females, 0) AS "Females",
+    COALESCE(demog.ninos, 0) AS "Ninos",
+    COALESCE(demog.adultos, 0) AS "Adultos",
+    COALESCE(demog.adultos_mayores, 0) AS "AdultosMayores"
 FROM solicitudes sol
 INNER JOIN semanas s ON sol.semana_id = s.id
 INNER JOIN familias f ON sol.familia_id = f.id
 INNER JOIN refugios r ON f.refugio_id = r.id
-LEFT JOIN integrantes i ON i.familia_id = f.id
 INNER JOIN detalles_solicitud ds ON ds.solicitud_id = sol.id
 LEFT JOIN productos p ON ds.producto_id = p.id
+LEFT JOIN (
+    SELECT
+        familia_id,
+        COUNT(id) AS total_integrantes,
+        SUM(CASE WHEN sexo = 'M' THEN 1 ELSE 0 END) AS males,
+        SUM(CASE WHEN sexo = 'F' THEN 1 ELSE 0 END) AS females,
+        SUM(CASE WHEN edad < 12 THEN 1 ELSE 0 END) AS ninos,
+        SUM(CASE WHEN edad >= 12 AND edad <= 59 THEN 1 ELSE 0 END) AS adultos,
+        SUM(CASE WHEN edad >= 60 THEN 1 ELSE 0 END) AS adultos_mayores
+    FROM integrantes
+    GROUP BY familia_id
+) demog ON demog.familia_id = f.id
 WHERE s.id = :semana_id
-ORDER BY f.codigo_numero, i.apellidos;
+ORDER BY f.codigo_numero;
