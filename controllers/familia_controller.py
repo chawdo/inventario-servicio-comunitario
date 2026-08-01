@@ -40,6 +40,105 @@ class FamiliaController:
             conn.close()
 
     @staticmethod
+    def actualizar_integrante(integrante_id: int, nombres: str, apellidos: str, edad: int, sexo: str, condicion_especial: str) -> None:
+        """
+        Actualiza los datos de un integrante existente.
+        """
+        if not nombres.strip():
+            raise ValueError("Los nombres del integrante no pueden estar vacíos.")
+        if not apellidos.strip():
+            raise ValueError("Los apellidos del integrante no pueden estar vacíos.")
+        if edad < 0:
+            raise ValueError("La edad debe ser un número entero no negativo.")
+        if sexo not in ('M', 'F'):
+            raise ValueError("El sexo debe ser 'M' (Masculino) o 'F' (Femenino).")
+
+        conn = get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute("""
+                UPDATE integrantes
+                SET nombres = ?, apellidos = ?, edad = ?, sexo = ?, condicion_especial = ?
+                WHERE id = ?
+            """, (nombres.strip(), apellidos.strip(), edad, sexo, condicion_especial.strip() or None, integrante_id))
+            conn.commit()
+        except sqlite3.Error as e:
+            conn.rollback()
+            print(f"Error al actualizar integrante: {e}")
+            raise
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def eliminar_integrante(integrante_id: int) -> None:
+        """
+        Elimina un integrante de la familia.
+        """
+        conn = get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute("DELETE FROM integrantes WHERE id = ?", (integrante_id,))
+            conn.commit()
+        except sqlite3.Error as e:
+            conn.rollback()
+            print(f"Error al eliminar integrante: {e}")
+            raise
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def actualizar_familia(familia_id: int, codigo_numero: str, nombre_representativo: str) -> None:
+        """
+        Actualiza los datos de una familia existente.
+        """
+        if not codigo_numero.strip():
+            raise ValueError("El código de la familia no puede estar vacío.")
+        if not nombre_representativo.strip():
+            raise ValueError("El nombre representativo de la familia no puede estar vacío.")
+
+        conn = get_connection()
+        cursor = conn.cursor()
+        try:
+            # Validar unicidad de código_numero en el sistema excluyendo la familia actual
+            cursor.execute("SELECT id FROM familias WHERE codigo_numero = ? AND id != ?", (codigo_numero.strip(), familia_id))
+            if cursor.fetchone():
+                raise ValueError(f"Ya existe otra familia registrada con el código '{codigo_numero}'.")
+
+            cursor.execute("""
+                UPDATE familias
+                SET codigo_numero = ?, nombre_representativo = ?
+                WHERE id = ?
+            """, (codigo_numero.strip(), nombre_representativo.strip(), familia_id))
+            conn.commit()
+        except sqlite3.Error as e:
+            conn.rollback()
+            print(f"Error al actualizar familia: {e}")
+            raise
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def eliminar_familia(familia_id: int) -> None:
+        """
+        Elimina una familia y cascada sus integrantes y solicitudes asociadas.
+        """
+        conn = get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute("DELETE FROM familias WHERE id = ?", (familia_id,))
+            conn.commit()
+        except sqlite3.Error as e:
+            conn.rollback()
+            print(f"Error al eliminar familia: {e}")
+            raise
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
     def crear_familia(refugio_id: int, codigo_numero: str, nombre_representativo: str) -> int:
         """
         Registra una nueva familia bajo un refugio específico.
