@@ -3,6 +3,7 @@ from unittest.mock import patch
 import sqlite3
 from controllers.refugio_controller import RefugioController
 from controllers.familia_controller import FamiliaController
+from controllers.inventario_controller import InventarioController
 from database.schema import create_tables
 
 class CustomConnection:
@@ -38,12 +39,15 @@ class TestControllers(unittest.TestCase):
 
         self.patcher = patch('controllers.refugio_controller.get_connection', return_value=self.wrapper_conn)
         self.patcher_fam = patch('controllers.familia_controller.get_connection', return_value=self.wrapper_conn)
+        self.patcher_inv = patch('controllers.inventario_controller.get_connection', return_value=self.wrapper_conn)
         self.patcher.start()
         self.patcher_fam.start()
+        self.patcher_inv.start()
 
     def tearDown(self):
         self.patcher.stop()
         self.patcher_fam.stop()
+        self.patcher_inv.stop()
         self.real_conn.close()
 
     def test_crear_y_obtener_refugio(self):
@@ -98,6 +102,96 @@ class TestControllers(unittest.TestCase):
         self.assertEqual(resumen["ninos"], 1) # María (12)
         self.assertEqual(resumen["adultos"], 1) # Pedro (40)
         self.assertEqual(resumen["adultos_mayores"], 1) # Abuelo (75)
+
+    def test_gestion_categorias(self):
+        # Crear categorías
+        cat1_id = InventarioController.crear_categoria("Alimentos", "Comida")
+        self.assertTrue(cat1_id > 0)
+
+        cat2_id = InventarioController.crear_categoria("Higiene", "Aseo")
+        self.assertTrue(cat2_id > 0)
+
+        # Evitar duplicados
+        with self.assertRaises(ValueError):
+            InventarioController.crear_categoria("Alimentos", "Otra descripción")
+
+        # Nombre vacío
+        with self.assertRaises(ValueError):
+            InventarioController.crear_categoria("", "")
+
+        # Listar y verificar
+        cats = InventarioController.obtener_todas_categorias()
+        self.assertEqual(len(cats), 2)
+        self.assertEqual(cats[0]["nombre"], "Alimentos")
+        self.assertEqual(cats[1]["nombre"], "Higiene")
+
+    def test_gestion_productos(self):
+        # Crear categoría requerida
+        cat_id = InventarioController.crear_categoria("Alimentos", "Comida")
+
+        # Crear producto
+        prod1_id = InventarioController.crear_producto(
+            categoria_id=cat_id,
+            nombre="Arroz",
+            empaque_unidad="Saco",
+            tamano_unidad_peso=24.0,
+            unidad_medida="kg",
+            stock_unidades=10.0,
+            precio_unidad=24.00
+        )
+        self.assertTrue(prod1_id > 0)
+
+        # Validar cálculo automático de precio por kg/litro (24.00 / 24.0 = 1.00)
+        productos = InventarioController.obtener_todos_productos()
+        self.assertEqual(len(productos), 1)
+        self.assertEqual(productos[0]["nombre"], "Arroz")
+        self.assertEqual(productos[0]["precio_kilo_litro"], 1.00)
+
+        # Actualizar producto
+        InventarioController.actualizar_producto(
+            producto_id=prod1_id,
+            categoria_id=cat_id,
+            nombre="Arroz Extra",
+            empaque_unidad="Saco",
+            tamano_unidad_peso=20.0,
+            unidad_medida="kg",
+            stock_unidades=8.0,
+            precio_unidad=30.00
+        )
+
+        # Validar actualización y nuevo precio por kg (30.00 / 20.0 = 1.50)
+        productos_act = InventarioController.obtener_todos_productos()
+        self.assertEqual(len(productos_act), 1)
+        self.assertEqual(productos_act[0]["nombre"], "Arroz Extra")
+        self.assertEqual(productos_act[0]["stock_unidades"], 8.0)
+        self.assertEqual(productos_act[0]["precio_kilo_litro"], 1.50)
+
+    def test_validaciones_productos(self):
+        cat_id = InventarioController.crear_categoria("Higiene", "Aseo")
+
+        # Categoría no existe o no es válida
+        with self.assertRaises(ValueError):
+            InventarioController.crear_producto(0, "A", "B", 1.0, "kg", 1.0, 1.0)
+
+        # Nombre vacío
+        with self.assertRaises(ValueError):
+            InventarioController.crear_producto(cat_id, "", "B", 1.0, "kg", 1.0, 1.0)
+
+        # Empaque vacío
+        with self.assertRaises(ValueError):
+            InventarioController.crear_producto(cat_id, "A", "", 1.0, "kg", 1.0, 1.0)
+
+        # Tamaño unidad <= 0
+        with self.assertRaises(ValueError):
+            InventarioController.crear_producto(cat_id, "A", "B", 0.0, "kg", 1.0, 1.0)
+
+        # Stock < 0
+        with self.assertRaises(ValueError):
+            InventarioController.crear_producto(cat_id, "A", "B", 1.0, "kg", -1.0, 1.0)
+
+        # Precio < 0
+        with self.assertRaises(ValueError):
+            InventarioController.crear_producto(cat_id, "A", "B", 1.0, "kg", 1.0, -1.0)
 
 if __name__ == "__main__":
     unittest.main()
