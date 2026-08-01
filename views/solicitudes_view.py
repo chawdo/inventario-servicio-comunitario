@@ -2,7 +2,7 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QTableWidget, QTableWidgetItem, QHeaderView,
     QFormLayout, QMessageBox, QGroupBox, QComboBox, QDoubleSpinBox,
-    QDialog, QSplitter, QTextEdit
+    QDialog, QSplitter, QTextEdit, QTabWidget
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor, QFont
@@ -76,7 +76,7 @@ class CrearSemanaDialog(QDialog):
 
 class SolicitudesView(QWidget):
     """
-    Vista del Módulo de Solicitudes Semanales y Descuento Híbrido de Inventario.
+    Vista del Módulo de Solicitudes Semanales con Registro Híbrido e Historial de la Semana.
     """
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -87,14 +87,15 @@ class SolicitudesView(QWidget):
     def init_ui(self):
         main_layout = QVBoxLayout(self)
 
-        # ------------------ TOP PANEL: GESTIÓN DE SEMANAS ------------------
-        top_group = QGroupBox("Gestión de Período y Cabecera de Pedido")
+        # ------------------ TOP PANEL (COMÚN): GESTIÓN DE SEMANA ACTIVA ------------------
+        top_group = QGroupBox("Gestión de Período Activo")
         top_layout = QHBoxLayout(top_group)
 
         # Selector de Semana
         top_layout.addWidget(QLabel("Semana Activa *:"))
         self.combo_semana = QComboBox()
-        self.combo_semana.setMinimumWidth(220)
+        self.combo_semana.setMinimumWidth(250)
+        self.combo_semana.currentIndexChanged.connect(self.al_cambiar_semana_activa)
         top_layout.addWidget(self.combo_semana)
 
         self.btn_nueva_semana = QPushButton("Nueva Semana")
@@ -102,29 +103,40 @@ class SolicitudesView(QWidget):
         self.btn_nueva_semana.clicked.connect(self.abrir_crear_semana)
         top_layout.addWidget(self.btn_nueva_semana)
 
-        top_layout.addSpacing(20)
-
-        # Selector de Refugio
-        top_layout.addWidget(QLabel("Refugio *:"))
-        self.combo_refugio = QComboBox()
-        self.combo_refugio.setMinimumWidth(200)
-        self.combo_refugio.currentIndexChanged.connect(self.al_cambiar_refugio)
-        top_layout.addWidget(self.combo_refugio)
-
-        # Selector de Familia
-        top_layout.addWidget(QLabel("Familia *:"))
-        self.combo_familia = QComboBox()
-        self.combo_familia.setMinimumWidth(200)
-        top_layout.addWidget(self.combo_familia)
-
         top_layout.addStretch()
         main_layout.addWidget(top_group)
 
-        # ------------------ SPLITTER PRINCIPAL ------------------
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-        main_layout.addWidget(splitter)
+        # ------------------ TAB CONTROL: REGISTRO E HISTORIAL ------------------
+        self.tabs = QTabWidget()
+        main_layout.addWidget(self.tabs)
 
-        # =============== SECCIÓN IZQUIERDA: BUSCADOR HÍBRIDO ===============
+        # ================= TAB 1: REGISTRAR SOLICITUD =================
+        tab_registro = QWidget()
+        tab_registro_layout = QVBoxLayout(tab_registro)
+
+        # Selector de Refugio y Familia
+        header_group = QGroupBox("Cabecera del Pedido")
+        header_layout = QHBoxLayout(header_group)
+
+        header_layout.addWidget(QLabel("Refugio *:"))
+        self.combo_refugio = QComboBox()
+        self.combo_refugio.setMinimumWidth(200)
+        self.combo_refugio.currentIndexChanged.connect(self.al_cambiar_refugio)
+        header_layout.addWidget(self.combo_refugio)
+
+        header_layout.addWidget(QLabel("Familia *:"))
+        self.combo_familia = QComboBox()
+        self.combo_familia.setMinimumWidth(200)
+        header_layout.addWidget(self.combo_familia)
+
+        header_layout.addStretch()
+        tab_registro_layout.addWidget(header_group)
+
+        # Splitter principal para Registro
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        tab_registro_layout.addWidget(splitter)
+
+        # Sub-sección Izquierda: Buscador Híbrido
         left_widget = QWidget()
         left_layout = QVBoxLayout(left_widget)
         left_layout.setContentsMargins(0, 0, 0, 0)
@@ -180,7 +192,7 @@ class SolicitudesView(QWidget):
         left_layout.addStretch()
         splitter.addWidget(left_widget)
 
-        # =============== SECCIÓN DERECHA: TABLA RESUMEN ===============
+        # Sub-sección Derecha: Tabla Resumen
         right_widget = QWidget()
         right_layout = QVBoxLayout(right_widget)
         right_layout.setContentsMargins(0, 0, 0, 0)
@@ -199,7 +211,7 @@ class SolicitudesView(QWidget):
 
         summary_layout.addWidget(self.table_pedido)
 
-        # Acciones de Confirmación del Pedido
+        # Acciones de Confirmación
         btn_action_layout = QHBoxLayout()
         self.btn_confirmar_pedido = QPushButton("Confirmar y Guardar Pedido")
         self.btn_confirmar_pedido.setStyleSheet("background-color: #2E7D32; color: white; font-weight: bold; padding: 10px 15px; font-size: 13px;")
@@ -216,8 +228,61 @@ class SolicitudesView(QWidget):
         right_layout.addWidget(summary_group)
         splitter.addWidget(right_widget)
 
-        # Ajuste de tamaño inicial (40% izquierdo, 60% derecho)
         splitter.setSizes([400, 600])
+        self.tabs.addTab(tab_registro, "Registrar Solicitud")
+
+        # ================= TAB 2: HISTORIAL DE SOLICITUDES =================
+        tab_historial = QWidget()
+        tab_historial_layout = QVBoxLayout(tab_historial)
+
+        splitter_historial = QSplitter(Qt.Orientation.Horizontal)
+        tab_historial_layout.addWidget(splitter_historial)
+
+        # Historial Lado Izquierdo: Lista de solicitudes de la semana
+        hist_left_container = QWidget()
+        hist_left_layout = QVBoxLayout(hist_left_container)
+        hist_left_layout.setContentsMargins(0, 0, 0, 0)
+
+        hist_left_group = QGroupBox("Solicitudes de la Semana Activa")
+        hist_left_group_layout = QVBoxLayout(hist_left_group)
+
+        self.table_historial = QTableWidget()
+        self.table_historial.setColumnCount(5)
+        self.table_historial.setHorizontalHeaderLabels([
+            "ID", "Código Fam.", "Familia", "Fecha Registro", "Acciones"
+        ])
+        self.table_historial.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.table_historial.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.table_historial.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.table_historial.itemSelectionChanged.connect(self.al_seleccionar_solicitud_historial)
+
+        hist_left_group_layout.addWidget(self.table_historial)
+        hist_left_layout.addWidget(hist_left_group)
+        splitter_historial.addWidget(hist_left_container)
+
+        # Historial Lado Derecho: Detalles de la solicitud seleccionada
+        hist_right_container = QWidget()
+        hist_right_layout = QVBoxLayout(hist_right_container)
+        hist_right_layout.setContentsMargins(0, 0, 0, 0)
+
+        hist_right_group = QGroupBox("Detalles de Solicitud Seleccionada")
+        hist_right_group_layout = QVBoxLayout(hist_right_group)
+
+        self.table_historial_detalles = QTableWidget()
+        self.table_historial_detalles.setColumnCount(4)
+        self.table_historial_detalles.setHorizontalHeaderLabels([
+            "Producto/Insumo", "Cantidad", "Unidad", "Origen"
+        ])
+        self.table_historial_detalles.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.table_historial_detalles.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.table_historial_detalles.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+
+        hist_right_group_layout.addWidget(self.table_historial_detalles)
+        hist_right_layout.addWidget(hist_right_group)
+        splitter_historial.addWidget(hist_right_container)
+
+        splitter_historial.setSizes([550, 450])
+        self.tabs.addTab(tab_historial, "Historial de Solicitudes de la Semana")
 
         # Cargas iniciales de datos
         self.cargar_semanas()
@@ -230,6 +295,7 @@ class SolicitudesView(QWidget):
         """
         Llena el combo de semanas activas.
         """
+        self.combo_semana.blockSignals(True)
         self.combo_semana.clear()
         try:
             semanas = SolicitudController.obtener_todas_semanas()
@@ -237,6 +303,15 @@ class SolicitudesView(QWidget):
                 self.combo_semana.addItem(sem["nombre_semana"], sem["id"])
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Error al cargar semanas: {e}")
+        finally:
+            self.combo_semana.blockSignals(False)
+            self.cargar_historial_solicitudes()
+
+    def al_cambiar_semana_activa(self):
+        """
+        Gatillado al cambiar el período/semana seleccionada.
+        """
+        self.cargar_historial_solicitudes()
 
     def abrir_crear_semana(self):
         """
@@ -267,7 +342,7 @@ class SolicitudesView(QWidget):
         """
         Carga las familias asociadas al refugio seleccionado de forma dinámica.
         """
-        ref_id = self.combo_refugio.currentData()
+        ref_id = self.combo_refugios_data = self.combo_refugio.currentData()
         self.combo_familia.clear()
         if not ref_id:
             return
@@ -279,7 +354,6 @@ class SolicitudesView(QWidget):
             else:
                 self.combo_familia.addItem("-- Seleccione una Familia --", None)
                 for fam in familias:
-                    # Mostrar código y nombre
                     display_text = f"{fam['codigo_numero']} - {fam['nombre_representativo']}"
                     self.combo_familia.addItem(display_text, fam["id"])
         except Exception as e:
@@ -295,7 +369,6 @@ class SolicitudesView(QWidget):
             self.productos_inventario = InventarioController.obtener_todos_productos()
             self.combo_producto_inv.addItem("-- Buscar Producto del Inventario --", None)
             for prod in self.productos_inventario:
-                # Ej: Arroz Premium (Saco de 24 kg) - Stock: 10
                 txt = f"{prod['nombre']} ({prod['empaque_unidad']}) - Stock: {prod['stock_unidades']:.2f} {prod['unidad_medida']}"
                 self.combo_producto_inv.addItem(txt, prod["id"])
         except Exception as e:
@@ -313,7 +386,6 @@ class SolicitudesView(QWidget):
             self.lbl_stock_info.setStyleSheet("font-weight: bold; color: #0D47A1;")
             return
 
-        # Buscar el producto localmente
         prod = next((p for p in self.productos_inventario if p["id"] == prod_id), None)
         if prod:
             self.lbl_stock_info.setText(
@@ -322,12 +394,10 @@ class SolicitudesView(QWidget):
             )
             self.lbl_stock_info.setStyleSheet("font-weight: bold; color: #2E7D32;")
 
-            # Autoseleccionar unidad de medida
             idx = self.combo_unidad_medida.findText(prod["unidad_medida"])
             if idx != -1:
                 self.combo_unidad_medida.setCurrentIndex(idx)
 
-            # Limpiar campo libre manual por comodidad
             self.txt_manual_nombre.clear()
 
     # ------------------ BORRADOR DE PEDIDO (INTERFAZ LOCAL) ------------------
@@ -341,7 +411,6 @@ class SolicitudesView(QWidget):
         cantidad = self.spin_cantidad.value()
         unidad = self.combo_unidad_medida.currentText()
 
-        # Validaciones preliminares
         if cantidad <= 0:
             QMessageBox.warning(self, "Validación", "La cantidad debe ser mayor que cero.")
             return
@@ -353,18 +422,14 @@ class SolicitudesView(QWidget):
             )
             return
 
-        # Determinar si viene de inventario o manual
         if prod_id:
-            # Viene de inventario
             prod = next((p for p in self.productos_inventario if p["id"] == prod_id), None)
             if not prod:
                 QMessageBox.warning(self, "Error", "El producto de inventario seleccionado es inválido.")
                 return
 
-            # Verificar si ya está en el borrador actual (evitar duplicados o sumar)
             duplicado = next((i for i in self.items_pedido if i["producto_id"] == prod_id), None)
             if duplicado:
-                # Validar stock acumulado
                 nueva_cantidad_acumulada = duplicado["cantidad_solicitada"] + cantidad
                 if prod["stock_unidades"] < nueva_cantidad_acumulada:
                     QMessageBox.warning(
@@ -375,7 +440,6 @@ class SolicitudesView(QWidget):
                     return
                 duplicado["cantidad_solicitada"] = nueva_cantidad_acumulada
             else:
-                # Validar stock individual
                 if prod["stock_unidades"] < cantidad:
                     QMessageBox.warning(
                         self, "Stock Insuficiente",
@@ -384,18 +448,15 @@ class SolicitudesView(QWidget):
                     )
                     return
 
-                # Crear nuevo ítem en el borrador
                 self.items_pedido.append({
                     "producto_id": prod_id,
                     "nombre_visual": prod["nombre"],
                     "nombre_producto_manual": None,
                     "cantidad_solicitada": cantidad,
-                    "unidad_medida_solicitada": unidad,
+                    "unidad_medida_solicitada": ... if False else unidad,
                     "en_inventario": True
                 })
         else:
-            # Producto manual
-            # Permitir duplicados por nombre si es que se desea, pero preferible consolidar si coincide exactamente
             duplicado = next((i for i in self.items_pedido if i["en_inventario"] is False and i["nombre_producto_manual"].lower() == nombre_manual.lower()), None)
             if duplicado:
                 duplicado["cantidad_solicitada"] += cantidad
@@ -409,30 +470,25 @@ class SolicitudesView(QWidget):
                     "en_inventario": False
                 })
 
-        # Limpiar cargador
         self.combo_producto_inv.setCurrentIndex(0)
         self.txt_manual_nombre.clear()
         self.spin_cantidad.setValue(1.0)
         self.lbl_stock_info.setText("Seleccione un producto para ver disponibilidad...")
         self.lbl_stock_info.setStyleSheet("font-weight: bold; color: #0D47A1;")
 
-        # Renderizar la tabla
         self.actualizar_tabla_resumen()
 
     def actualizar_tabla_resumen(self):
         """
         Refresca visualmente la tabla que contiene el borrador del pedido.
-        Aplica color naranja/amarillo para productos manuales [No en Inventario].
         """
         self.table_pedido.setRowCount(0)
         for idx, item in enumerate(self.items_pedido):
             row_idx = self.table_pedido.rowCount()
             self.table_pedido.insertRow(row_idx)
 
-            # 1. Producto (Nombre Visual)
             self.table_pedido.setItem(row_idx, 0, QTableWidgetItem(item["nombre_visual"]))
 
-            # 2. Origen/Estado con estilo diferenciado
             estado_item = QTableWidgetItem()
             if item["en_inventario"]:
                 estado_item.setText("En Inventario")
@@ -443,25 +499,17 @@ class SolicitudesView(QWidget):
                 estado_item.setFont(QFont("Arial", 9, QFont.Weight.Bold))
 
             self.table_pedido.setItem(row_idx, 1, estado_item)
-
-            # 3. Cantidad
             self.table_pedido.setItem(row_idx, 2, QTableWidgetItem(f"{item['cantidad_solicitada']:.2f}"))
-
-            # 4. Unidad
             self.table_pedido.setItem(row_idx, 3, QTableWidgetItem(item["unidad_medida_solicitada"]))
 
-            # 5. ID Producto
             id_val = str(item["producto_id"]) if item["producto_id"] else "Manual"
             self.table_pedido.setItem(row_idx, 4, QTableWidgetItem(id_val))
 
-            # 6. Botón Acciones (Eliminar de la fila)
             btn_eliminar = QPushButton("Eliminar")
             btn_eliminar.setStyleSheet("background-color: #E53935; color: white; padding: 2px 5px;")
-            # Capturar índice actual usando clausura
             btn_eliminar.clicked.connect(lambda checked, idx=idx: self.eliminar_item_borrador(idx))
             self.table_pedido.setCellWidget(row_idx, 5, btn_eliminar)
 
-            # Si es manual, colorear la fila completa en naranja/amarillo suave
             if not item["en_inventario"]:
                 for col in range(5):
                     self.table_pedido.item(row_idx, col).setBackground(QColor("#FFF3E0"))
@@ -487,12 +535,9 @@ class SolicitudesView(QWidget):
         self.lbl_stock_info.setText("Seleccione un producto para ver disponibilidad...")
         self.lbl_stock_info.setStyleSheet("font-weight: bold; color: #0D47A1;")
 
-    # ------------------ REGISTRO Y GUARDADO DEFINITIVO ------------------
-
     def confirmar_guardar_pedido(self):
         """
-        Valida datos generales de cabecera y envía la solicitud al controlador para
-        ejecutar el guardado transaccional.
+        Valida datos generales de cabecera y envía la solicitud al controlador para ejecutar el guardado transaccional.
         """
         semana_id = self.combo_semana.currentData()
         refugio_id = self.combo_refugio.currentData()
@@ -512,7 +557,6 @@ class SolicitudesView(QWidget):
             QMessageBox.warning(self, "Pedido Vacío", "No puede guardar una solicitud sin ítems/productos agregados.")
             return
 
-        # Confirmación de confirmación
         reply = QMessageBox.question(
             self, "Confirmar Pedido",
             "¿Está seguro de que desea confirmar y registrar esta solicitud? "
@@ -525,7 +569,6 @@ class SolicitudesView(QWidget):
             return
 
         try:
-            # Enviar solicitud y detalles a través del controlador transaccional
             solicitud_id = SolicitudController.crear_solicitud_con_detalles(
                 semana_id=semana_id,
                 familia_id=familia_id,
@@ -539,11 +582,111 @@ class SolicitudesView(QWidget):
                 "El stock correspondiente ha sido descontado correctamente."
             )
 
-            # Limpiar todo y refrescar catálogo de productos
             self.limpiar_pedido_completo()
             self.cargar_productos_inventario()
+            self.cargar_historial_solicitudes()
 
         except ValueError as ve:
             QMessageBox.warning(self, "Validación de Stock / Error", str(ve))
         except Exception as e:
             QMessageBox.critical(self, "Error de Sistema", f"No se pudo guardar la solicitud: {e}")
+
+    # ================= GESTIÓN E HISTORIAL DE SOLICITUDES =================
+
+    def cargar_historial_solicitudes(self):
+        """
+        Consulta y muestra las solicitudes registradas para la semana activa.
+        """
+        # Asegurarse de que el widget de historial esté inicializado antes de escribir en él
+        if not hasattr(self, 'table_historial'):
+            return
+
+        self.table_historial.setRowCount(0)
+        self.table_historial_detalles.setRowCount(0)
+        semana_id = self.combo_semana.currentData()
+
+        if not semana_id:
+            return
+
+        try:
+            solicitudes = SolicitudController.obtener_solicitudes_por_semana(semana_id)
+            for s in solicitudes:
+                row_idx = self.table_historial.rowCount()
+                self.table_historial.insertRow(row_idx)
+
+                self.table_historial.setItem(row_idx, 0, QTableWidgetItem(str(s["id"])))
+                self.table_historial.setItem(row_idx, 1, QTableWidgetItem(s["codigo_familia"]))
+                self.table_historial.setItem(row_idx, 2, QTableWidgetItem(s["nombre_familia"]))
+                self.table_historial.setItem(row_idx, 3, QTableWidgetItem(s["fecha_solicitud"]))
+
+                # Botón de Acción: Eliminar Solicitud
+                btn_eliminar = QPushButton("Eliminar")
+                btn_eliminar.setStyleSheet("background-color: #D32F2F; color: white; padding: 2px 6px; font-weight: bold;")
+                btn_eliminar.clicked.connect(lambda checked, s_id=s["id"]: self.eliminar_solicitud_historial(s_id))
+                self.table_historial.setCellWidget(row_idx, 4, btn_eliminar)
+
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Error al cargar historial de solicitudes: {e}")
+
+    def al_seleccionar_solicitud_historial(self):
+        """
+        Carga y visualiza los productos/detalles para la solicitud seleccionada del historial.
+        """
+        self.table_historial_detalles.setRowCount(0)
+        selected_ranges = self.table_historial.selectedRanges()
+        if not selected_ranges:
+            return
+
+        row_idx = selected_ranges[0].topRow()
+        solicitud_id_item = self.table_historial.item(row_idx, 0)
+        if not solicitud_id_item:
+            return
+
+        solicitud_id = int(solicitud_id_item.text())
+
+        try:
+            detalles = SolicitudController.obtener_detalles_solicitud(solicitud_id)
+            for d in detalles:
+                r_idx = self.table_historial_detalles.rowCount()
+                self.table_historial_detalles.insertRow(r_idx)
+
+                self.table_historial_detalles.setItem(r_idx, 0, QTableWidgetItem(d["nombre_producto"]))
+                self.table_historial_detalles.setItem(r_idx, 1, QTableWidgetItem(f"{d['cantidad']:.2f}"))
+                self.table_historial_detalles.setItem(r_idx, 2, QTableWidgetItem(d["unidad"]))
+
+                estado_item = QTableWidgetItem("Inventario" if d["en_inventario"] else "Manual")
+                if d["en_inventario"]:
+                    estado_item.setForeground(QColor("#2E7D32"))
+                else:
+                    estado_item.setForeground(QColor("#E65100"))
+                self.table_historial_detalles.setItem(r_idx, 3, estado_item)
+
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Error al cargar los detalles del pedido: {e}")
+
+    def eliminar_solicitud_historial(self, solicitud_id: int):
+        """
+        Elimina la solicitud y revierte el stock del inventario de forma segura.
+        """
+        reply = QMessageBox.question(
+            self, "Confirmar Eliminación",
+            "¿Está seguro de que desea eliminar esta solicitud? "
+            "Esto devolverá de manera automática el stock de los productos de inventario que correspondan.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        if reply == QMessageBox.StandardButton.No:
+            return
+
+        try:
+            SolicitudController.eliminar_solicitud(solicitud_id)
+            QMessageBox.information(
+                self, "Éxito",
+                "La solicitud ha sido eliminada correctamente y las cantidades correspondientes "
+                "han sido devueltas al inventario."
+            )
+            # Recargar tablas y dropdown de inventario
+            self.cargar_historial_solicitudes()
+            self.cargar_productos_inventario()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"No se pudo eliminar la solicitud: {e}")

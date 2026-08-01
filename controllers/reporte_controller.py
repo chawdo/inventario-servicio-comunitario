@@ -11,34 +11,31 @@ class ReporteController:
     @staticmethod
     def obtener_datos_reporte(semana_id: int, refugio_id: Optional[int] = None) -> List[Dict[str, Any]]:
         """
-        Ejecuta la consulta SQL definida en REQUIREMENTS.md para obtener la lista de solicitudes,
-        con un filtro opcional por refugio_id.
+        Ejecuta la consulta de solicitudes de forma agrupada por producto pedido por la familia
+        (evitando el producto cartesiano), y concatena los integrantes de la familia en una sola columna.
         """
         conn = get_connection()
         cursor = conn.cursor()
 
-        # Consulta base
+        # Consulta base (sin LEFT JOIN a integrantes para evitar producto cartesiano)
         query = """
         SELECT
             s.nombre_semana AS "Semana",
             r.nombre AS "Refugio",
             f.codigo_numero AS "Código Familia",
             f.nombre_representativo AS "Familia",
-            (i.nombres || ' ' || i.apellidos) AS "Integrante",
-            i.edad AS "Edad",
-            i.sexo AS "Sexo",
             COALESCE(p.nombre, ds.nombre_producto_manual) AS "Producto Solicitado",
             ds.cantidad_solicitada AS "Cantidad",
             ds.unidad_medida_solicitada AS "Unidad",
             CASE
                 WHEN ds.en_inventario = 1 THEN 'Sí'
                 ELSE 'No'
-            END AS "Disponibilidad en Inventario"
+            END AS "Disponibilidad en Inventario",
+            f.id AS "FamiliaID"
         FROM solicitudes sol
         INNER JOIN semanas s ON sol.semana_id = s.id
         INNER JOIN familias f ON sol.familia_id = f.id
         INNER JOIN refugios r ON f.refugio_id = r.id
-        LEFT JOIN integrantes i ON i.familia_id = f.id
         INNER JOIN detalles_solicitud ds ON ds.solicitud_id = sol.id
         LEFT JOIN productos p ON ds.producto_id = p.id
         WHERE s.id = ?
@@ -49,28 +46,59 @@ class ReporteController:
             query += " AND r.id = ?"
             params.append(refugio_id)
 
-        # El requerimiento dice: "ORDER BY f.codigo_numero, i.apellidos"
-        query += " ORDER BY f.codigo_numero, i.apellidos"
+        query += " ORDER BY f.codigo_numero"
 
         try:
             cursor.execute(query, params)
             rows = cursor.fetchall()
 
-            column_names = [
-                "Semana", "Refugio", "Código Familia", "Familia", "Nombre Integrante",
-                "Edad", "Sexo", "Producto Solicitado", "Cantidad", "Unidad", "Disponibilidad en Inventario"
-            ]
-
             reporte = []
+            members_cache = {}  # Cache para optimizar las consultas de integrantes por familia
+
             for row in rows:
-                item = {}
-                for idx, col in enumerate(column_names):
-                    val = row[idx]
-                    # Limpieza de None
-                    if val is None:
-                        val = ""
-                    item[col] = val
-                reporte.append(item)
+                semana, refugio, cod_familia, familia, prod_solicitado, cantidad, unidad, en_inventario, familia_id = row
+
+                # Obtener o consultar los integrantes de esta familia
+                if familia_id not in members_cache:
+                    cursor.execute("""
+                        SELECT nombres, apellidos, edad, sexo
+                        FROM integrantes
+                        WHERE familia_id = ?
+                        ORDER BY id ASC
+                    """, (familia_id,))
+                    members_cache[familia_id] = cursor.fetchall()
+
+                integrantes = members_cache[familia_id]
+
+                # Formatear la columna de integrante, edad y sexo de acuerdo al número de integrantes
+                if len(integrantes) == 1:
+                    nombre_integrante = f"{integrantes[0][0]} {integrantes[0][1]}"
+                    edad = integrantes[0][2]
+                    sexo = integrantes[0][3]
+                elif len(integrantes) > 1:
+                    # Concatena en formato: Juan (30M), María (28F) | Total: 2
+                    parts = [f"{m[0]} ({m[2]}{m[3]})" for m in integrantes]
+                    nombre_integrante = f"{', '.join(parts)} | Total: {len(integrantes)}"
+                    edad = ""
+                    sexo = ""
+                else:
+                    nombre_integrante = ""
+                    edad = ""
+                    sexo = ""
+
+                reporte.append({
+                    "Semana": semana or "",
+                    "Refugio": refugio or "",
+                    "Código Familia": cod_familia or "",
+                    "Familia": familia or "",
+                    "Nombre Integrante": nombre_integrante,
+                    "Edad": edad,
+                    "Sexo": sexo,
+                    "Producto Solicitado": prod_solicitado or "",
+                    "Cantidad": cantidad if cantidad is not None else 0.0,
+                    "Unidad": unidad or "",
+                    "Disponibilidad en Inventario": en_inventario or "No"
+                })
 
             return reporte
         except sqlite3.Error as e:

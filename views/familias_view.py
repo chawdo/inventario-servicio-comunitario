@@ -2,11 +2,151 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QTableWidget, QTableWidgetItem, QHeaderView,
     QFormLayout, QMessageBox, QGroupBox, QComboBox, QSpinBox,
-    QRadioButton, QButtonGroup, QSplitter
+    QRadioButton, QButtonGroup, QSplitter, QDialog
 )
 from PyQt6.QtCore import Qt
 from controllers.refugio_controller import RefugioController
 from controllers.familia_controller import FamiliaController
+
+class EditarFamiliaDialog(QDialog):
+    """
+    Modal para editar una familia existente.
+    """
+    def __init__(self, familia, parent=None):
+        super().__init__(parent)
+        self.familia = familia
+        self.setWindowTitle("Editar Familia")
+        self.resize(350, 180)
+        self.init_ui()
+
+    def init_ui(self):
+        layout = QVBoxLayout(self)
+        form_group = QGroupBox("Datos de la Familia")
+        form_layout = QFormLayout(form_group)
+
+        self.txt_codigo = QLineEdit(self.familia["codigo_numero"])
+        self.txt_nombre = QLineEdit(self.familia["nombre_representativo"])
+
+        form_layout.addRow("Código / Número *:", self.txt_codigo)
+        form_layout.addRow("Nombre Representativo *:", self.txt_nombre)
+
+        layout.addWidget(form_group)
+
+        # Botones
+        btn_layout = QHBoxLayout()
+        self.btn_guardar = QPushButton("Guardar Cambios")
+        self.btn_guardar.setStyleSheet("background-color: #0288D1; color: white; font-weight: bold; padding: 6px;")
+        self.btn_guardar.clicked.connect(self.guardar_cambios)
+
+        self.btn_cancelar = QPushButton("Cancelar")
+        self.btn_cancelar.setStyleSheet("background-color: #90A4AE; color: white; font-weight: bold; padding: 6px;")
+        self.btn_cancelar.clicked.connect(self.reject)
+
+        btn_layout.addWidget(self.btn_guardar)
+        btn_layout.addWidget(self.btn_cancelar)
+        layout.addLayout(btn_layout)
+
+    def guardar_cambios(self):
+        codigo = self.txt_codigo.text().strip()
+        nombre = self.txt_nombre.text().strip()
+
+        if not codigo or not nombre:
+            QMessageBox.warning(self, "Campos Requeridos", "Todos los campos con (*) son obligatorios.")
+            return
+
+        try:
+            FamiliaController.actualizar_familia(self.familia["id"], codigo, nombre)
+            QMessageBox.information(self, "Éxito", "La familia ha sido actualizada correctamente.")
+            self.accept()
+        except ValueError as ve:
+            QMessageBox.warning(self, "Validación", str(ve))
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"No se pudo actualizar la familia: {e}")
+
+
+class EditarIntegranteDialog(QDialog):
+    """
+    Modal para editar un integrante existente.
+    """
+    def __init__(self, integrante, parent=None):
+        super().__init__(parent)
+        self.integrante = integrante
+        self.setWindowTitle("Editar Integrante")
+        self.resize(400, 300)
+        self.init_ui()
+
+    def init_ui(self):
+        layout = QVBoxLayout(self)
+        form_group = QGroupBox("Datos del Integrante")
+        form_layout = QFormLayout(form_group)
+
+        self.txt_nombres = QLineEdit(self.integrante["nombres"])
+        self.txt_apellidos = QLineEdit(self.integrante["apellidos"])
+
+        self.spin_edad = QSpinBox()
+        self.spin_edad.setRange(0, 120)
+        self.spin_edad.setValue(self.integrante["edad"])
+
+        # Sexo (Radio Buttons)
+        sexo_container = QWidget()
+        sexo_layout = QHBoxLayout(sexo_container)
+        sexo_layout.setContentsMargins(0, 0, 0, 0)
+        self.radio_m = QRadioButton("M")
+        self.radio_f = QRadioButton("F")
+        if self.integrante["sexo"] == "M":
+            self.radio_m.setChecked(True)
+        else:
+            self.radio_f.setChecked(True)
+        sexo_layout.addWidget(self.radio_m)
+        sexo_layout.addWidget(self.radio_f)
+        sexo_layout.addStretch()
+
+        self.button_group_sexo = QButtonGroup(self)
+        self.button_group_sexo.addButton(self.radio_m)
+        self.button_group_sexo.addButton(self.radio_f)
+
+        self.txt_condicion = QLineEdit(self.integrante["condicion_especial"])
+
+        form_layout.addRow("Nombres *:", self.txt_nombres)
+        form_layout.addRow("Apellidos *:", self.txt_apellidos)
+        form_layout.addRow("Edad *:", self.spin_edad)
+        form_layout.addRow("Sexo *:", sexo_container)
+        form_layout.addRow("Condición Especial:", self.txt_condicion)
+
+        layout.addWidget(form_group)
+
+        # Botones
+        btn_layout = QHBoxLayout()
+        self.btn_guardar = QPushButton("Guardar Cambios")
+        self.btn_guardar.setStyleSheet("background-color: #E64A19; color: white; font-weight: bold; padding: 6px;")
+        self.btn_guardar.clicked.connect(self.guardar_cambios)
+
+        self.btn_cancelar = QPushButton("Cancelar")
+        self.btn_cancelar.setStyleSheet("background-color: #90A4AE; color: white; font-weight: bold; padding: 6px;")
+        self.btn_cancelar.clicked.connect(self.reject)
+
+        btn_layout.addWidget(self.btn_guardar)
+        btn_layout.addWidget(self.btn_cancelar)
+        layout.addLayout(btn_layout)
+
+    def guardar_cambios(self):
+        nombres = self.txt_nombres.text().strip()
+        apellidos = self.txt_apellidos.text().strip()
+        edad = self.spin_edad.value()
+        sexo = "M" if self.radio_m.isChecked() else "F"
+        condicion = self.txt_condicion.text().strip()
+
+        if not nombres or not apellidos:
+            QMessageBox.warning(self, "Campos Requeridos", "Los nombres y apellidos son obligatorios.")
+            return
+
+        try:
+            FamiliaController.actualizar_integrante(self.integrante["id"], nombres, apellidos, edad, sexo, condicion)
+            QMessageBox.information(self, "Éxito", "El integrante ha sido actualizado correctamente.")
+            self.accept()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"No se pudo actualizar el integrante: {e}")
+
 
 class FamiliasView(QWidget):
     """
@@ -72,8 +212,8 @@ class FamiliasView(QWidget):
         layout_familias.addWidget(lbl_fam_registradas)
 
         self.table_familias = QTableWidget()
-        self.table_familias.setColumnCount(3)
-        self.table_familias.setHorizontalHeaderLabels(["ID", "Código", "Nombre Representativo"])
+        self.table_familias.setColumnCount(4)
+        self.table_familias.setHorizontalHeaderLabels(["ID", "Código", "Nombre Representativo", "Acciones"])
         self.table_familias.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.table_familias.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table_familias.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
@@ -152,9 +292,9 @@ class FamiliasView(QWidget):
         layout_integrantes.addWidget(lbl_int_registrados)
 
         self.table_integrantes = QTableWidget()
-        self.table_integrantes.setColumnCount(6)
+        self.table_integrantes.setColumnCount(7)
         self.table_integrantes.setHorizontalHeaderLabels([
-            "ID", "Nombres", "Apellidos", "Edad", "Sexo", "Condición Especial"
+            "ID", "Nombres", "Apellidos", "Edad", "Sexo", "Condición Especial", "Acciones"
         ])
         self.table_integrantes.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.table_integrantes.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
@@ -210,6 +350,24 @@ class FamiliasView(QWidget):
                 self.table_familias.setItem(row_idx, 0, QTableWidgetItem(str(f["id"])))
                 self.table_familias.setItem(row_idx, 1, QTableWidgetItem(f["codigo_numero"]))
                 self.table_familias.setItem(row_idx, 2, QTableWidgetItem(f["nombre_representativo"]))
+
+                # Botones de Acción: Editar y Eliminar para Familia
+                btn_container = QWidget()
+                btn_layout = QHBoxLayout(btn_container)
+                btn_layout.setContentsMargins(2, 2, 2, 2)
+                btn_layout.setSpacing(4)
+
+                btn_editar = QPushButton("Editar")
+                btn_editar.setStyleSheet("background-color: #F57C00; color: white; padding: 2px 6px; font-weight: bold;")
+                btn_editar.clicked.connect(lambda checked, f=f: self.editar_familia_modal(f))
+
+                btn_eliminar = QPushButton("Eliminar")
+                btn_eliminar.setStyleSheet("background-color: #D32F2F; color: white; padding: 2px 6px; font-weight: bold;")
+                btn_eliminar.clicked.connect(lambda checked, f_id=f["id"]: self.eliminar_familia(f_id))
+
+                btn_layout.addWidget(btn_editar)
+                btn_layout.addWidget(btn_eliminar)
+                self.table_familias.setCellWidget(row_idx, 3, btn_container)
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Error al cargar familias: {e}")
 
@@ -247,9 +405,79 @@ class FamiliasView(QWidget):
                 self.table_integrantes.setItem(r_idx, 4, QTableWidgetItem(i["sexo"]))
                 self.table_integrantes.setItem(r_idx, 5, QTableWidgetItem(i["condicion_especial"]))
 
+                # Botones de Acción: Editar y Eliminar para Integrante
+                btn_container = QWidget()
+                btn_layout = QHBoxLayout(btn_container)
+                btn_layout.setContentsMargins(2, 2, 2, 2)
+                btn_layout.setSpacing(4)
+
+                btn_editar = QPushButton("Editar")
+                btn_editar.setStyleSheet("background-color: #F57C00; color: white; padding: 2px 6px; font-weight: bold;")
+                btn_editar.clicked.connect(lambda checked, i=i: self.editar_integrante_modal(i))
+
+                btn_eliminar = QPushButton("Eliminar")
+                btn_eliminar.setStyleSheet("background-color: #D32F2F; color: white; padding: 2px 6px; font-weight: bold;")
+                btn_eliminar.clicked.connect(lambda checked, i_id=i["id"]: self.eliminar_integrante(i_id))
+
+                btn_layout.addWidget(btn_editar)
+                btn_layout.addWidget(btn_eliminar)
+                self.table_integrantes.setCellWidget(r_idx, 6, btn_container)
+
             self.actualizar_resumen(integrantes)
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Error al cargar integrantes: {e}")
+
+    def editar_familia_modal(self, familia):
+        """
+        Abre el modal para editar la familia.
+        """
+        dialog = EditarFamiliaDialog(familia, self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.al_seleccionar_refugio()
+
+    def eliminar_familia(self, familia_id):
+        """
+        Elimina la familia seleccionada después de una confirmación.
+        """
+        reply = QMessageBox.question(
+            self, "Confirmar Eliminación",
+            "¿Está seguro de que desea eliminar esta familia? Se eliminarán de forma permanente sus integrantes y solicitudes.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            try:
+                FamiliaController.eliminar_familia(familia_id)
+                QMessageBox.information(self, "Éxito", "La familia ha sido eliminada correctamente.")
+                self.al_seleccionar_refugio()
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"No se pudo eliminar la familia: {e}")
+
+    def editar_integrante_modal(self, integrante):
+        """
+        Abre el modal para editar el integrante.
+        """
+        dialog = EditarIntegranteDialog(integrante, self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.al_seleccionar_familia()
+
+    def eliminar_integrante(self, integrante_id):
+        """
+        Elimina el integrante seleccionado después de una confirmación.
+        """
+        reply = QMessageBox.question(
+            self, "Confirmar Eliminación",
+            "¿Está seguro de que desea eliminar a este integrante de la familia?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            try:
+                FamiliaController.eliminar_integrante(integrante_id)
+                QMessageBox.information(self, "Éxito", "El integrante ha sido eliminado correctamente.")
+                self.al_seleccionar_familia()
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"No se pudo eliminar al integrante: {e}")
 
     def actualizar_resumen(self, integrantes):
         """

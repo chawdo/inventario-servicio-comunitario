@@ -5,6 +5,7 @@ from controllers.refugio_controller import RefugioController
 from controllers.familia_controller import FamiliaController
 from controllers.inventario_controller import InventarioController
 from controllers.solicitud_controller import SolicitudController
+from controllers.reporte_controller import ReporteController
 from database.schema import create_tables
 
 class CustomConnection:
@@ -481,6 +482,141 @@ class TestControllers(unittest.TestCase):
             self.assertEqual(df_loaded.iloc[0]["Semana"], "Semana 1 - Agosto 2026")
             self.assertEqual(df_loaded.iloc[0]["Nombre Integrante"], "Esteban Quito")
             self.assertEqual(df_loaded.iloc[0]["Disponibilidad en Inventario"], "Sí")
+
+    def test_editar_y_eliminar_refugios_y_familias(self):
+        # 1. Crear refugio
+        ref_id = RefugioController.crear_refugio("Refugio Original", "Calle A", "Responsable A", 50)
+
+        # 2. Actualizar refugio
+        RefugioController.actualizar_refugio(ref_id, "Refugio Actualizado", "Calle B", "Responsable B", 60)
+        todos_ref = RefugioController.obtener_todos()
+        ref_actualizado = next(r for r in todos_ref if r["id"] == ref_id)
+        self.assertEqual(ref_actualizado["nombre"], "Refugio Actualizado")
+        self.assertEqual(ref_actualizado["capacidad_maxima"], 60)
+
+        # 3. Crear familia
+        fam_id = FamiliaController.crear_familia(ref_id, "FAM-XYZ", "Familia Original")
+
+        # Intentar eliminar refugio con familia asociada (debe lanzar ValueError)
+        with self.assertRaises(ValueError):
+            RefugioController.eliminar_refugio(ref_id)
+
+        # 4. Actualizar familia
+        FamiliaController.actualizar_familia(fam_id, "FAM-XYZ-ACT", "Familia Actualizada")
+        familias = FamiliaController.obtener_familias_por_refugio(ref_id)
+        fam_act = next(f for f in familias if f["id"] == fam_id)
+        self.assertEqual(fam_act["codigo_numero"], "FAM-XYZ-ACT")
+        self.assertEqual(fam_act["nombre_representativo"], "Familia Actualizada")
+
+        # 5. Integrante
+        int_id = FamiliaController.agregar_integrante(fam_id, "Carlos", "Sanz", 25, "M", "")
+        FamiliaController.actualizar_integrante(int_id, "Carlos Act", "Sanz Act", 26, "F", "Ninguna")
+        ints = FamiliaController.obtener_integrantes_por_familia(fam_id)
+        int_act = next(i for i in ints if i["id"] == int_id)
+        self.assertEqual(int_act["nombres"], "Carlos Act")
+        self.assertEqual(int_act["edad"], 26)
+        self.assertEqual(int_act["sexo"], "F")
+
+        # 6. Eliminar integrante
+        FamiliaController.eliminar_integrante(int_id)
+        self.assertEqual(len(FamiliaController.obtener_integrantes_por_familia(fam_id)), 0)
+
+        # 7. Eliminar familia
+        FamiliaController.eliminar_familia(fam_id)
+        self.assertEqual(len(FamiliaController.obtener_familias_por_refugio(ref_id)), 0)
+
+        # 8. Eliminar refugio (ahora sí debe dejar porque está vacío)
+        RefugioController.eliminar_refugio(ref_id)
+        self.assertEqual(len([r for r in RefugioController.obtener_todos() if r["id"] == ref_id]), 0)
+
+    def test_eliminar_solicitud_con_reversion_stock(self):
+        ref_id = RefugioController.crear_refugio("Refugio Stock", "Calle Stock", "Juan", 100)
+        fam_id = FamiliaController.crear_familia(ref_id, "FAM-STK", "Familia Stock")
+        cat_id = InventarioController.crear_categoria("Alimentos", "Comida")
+        prod_id = InventarioController.crear_producto(
+            categoria_id=cat_id,
+            nombre="Aceite",
+            empaque_unidad="Botella",
+            tamano_unidad_peso=1.0,
+            unidad_medida="litros",
+            stock_unidades=10.0,
+            precio_unidad=5.0
+        )
+        sem_id = SolicitudController.crear_semana("Semana Stock", "2026-08-01", "2026-08-07")
+
+        items = [{
+            "producto_id": prod_id,
+            "nombre_producto_manual": None,
+            "cantidad_solicitada": 4.0,
+            "unidad_medida_solicitada": "litros",
+            "en_inventario": True
+        }]
+
+        sol_id = SolicitudController.crear_solicitud_con_detalles(
+            semana_id=sem_id,
+            familia_id=fam_id,
+            observaciones="Pedido de Aceite",
+            items=items
+        )
+
+        # Verificar descuento inicial (10.0 - 4.0 = 6.0)
+        prod = next(p for p in InventarioController.obtener_todos_productos() if p["id"] == prod_id)
+        self.assertEqual(prod["stock_unidades"], 6.0)
+
+        # Eliminar la solicitud
+        SolicitudController.eliminar_solicitud(sol_id)
+
+        # Verificar que el stock volvió a 10.0
+        prod_rev = next(p for p in InventarioController.obtener_todos_productos() if p["id"] == prod_id)
+        self.assertEqual(prod_rev["stock_unidades"], 10.0)
+
+    def test_reporte_sin_producto_cartesiano_y_con_agrupamiento(self):
+        ref_id = RefugioController.crear_refugio("Refugio Multimiembros", "Calle X", "Pedro", 100)
+        fam_id = FamiliaController.crear_familia(ref_id, "FAM-MULTI", "Familia Multimiembros")
+
+        # 3 integrantes
+        FamiliaController.agregar_integrante(fam_id, "Juan", "Pérez", 30, "M", "")
+        FamiliaController.agregar_integrante(fam_id, "María", "Pérez", 28, "F", "")
+        FamiliaController.agregar_integrante(fam_id, "Pedro", "Pérez", 5, "M", "")
+
+        cat_id = InventarioController.crear_categoria("Alimentos", "Comida")
+        prod_id = InventarioController.crear_producto(
+            categoria_id=cat_id,
+            nombre="Leche",
+            empaque_unidad="Caja",
+            tamano_unidad_peso=1.0,
+            unidad_medida="litros",
+            stock_unidades=20.0,
+            precio_unidad=1.5
+        )
+        sem_id = SolicitudController.crear_semana("Semana Reporte Multi", "2026-08-01", "2026-08-07")
+
+        # Familia pide 1 litro de leche
+        items = [{
+            "producto_id": prod_id,
+            "nombre_producto_manual": None,
+            "cantidad_solicitada": 1.0,
+            "unidad_medida_solicitada": "litros",
+            "en_inventario": True
+        }]
+
+        SolicitudController.crear_solicitud_con_detalles(
+            semana_id=sem_id,
+            familia_id=fam_id,
+            observaciones="Pedido Leche",
+            items=items
+        )
+
+        # Obtener reporte: DEBE tener exactamente 1 fila (no 3!) y el Nombre Integrante debe ser la concatenación
+        datos = ReporteController.obtener_datos_reporte(semana_id=sem_id)
+        self.assertEqual(len(datos), 1)
+        self.assertEqual(datos[0]["Producto Solicitado"], "Leche")
+        self.assertEqual(datos[0]["Cantidad"], 1.0)
+
+        # Verificar formato de concatenación solicitado: "Juan (30M), María (28F), Pedro (5M) | Total: 3"
+        self.assertEqual(datos[0]["Nombre Integrante"], "Juan (30M), María (28F), Pedro (5M) | Total: 3")
+        self.assertEqual(datos[0]["Edad"], "")
+        self.assertEqual(datos[0]["Sexo"], "")
 
 
 if __name__ == "__main__":
