@@ -1,31 +1,31 @@
-import sqlite3
-import os
 import sys
+import sqlite3
 from pathlib import Path
 from typing import Optional
 
-if getattr(sys, 'frozen', False):
-    db_dir = Path(sys.executable).parent / 'database'
-else:
-    db_dir = Path(__file__).parent.parent / 'database'
-
-db_dir = db_dir.resolve()
-DB_FILE = str(db_dir / "refugios.db")
-
-def get_connection(db_path: str = DB_FILE) -> sqlite3.Connection:
+def get_db_path() -> str:
     """
-    Establece conexión a la base de datos SQLite activando PRAGMA foreign_keys = ON;.
+    Obtiene la ruta absoluta de la base de datos.
+    Detecta si la app se ejecuta como .exe o como script de Python.
     """
-    try:
-        if db_path != ":memory:":
-            parent_dir = Path(db_path).parent
-            os.makedirs(parent_dir, exist_ok=True)
-        conn = sqlite3.connect(db_path)
-        conn.execute("PRAGMA foreign_keys = ON;")
-        return conn
-    except sqlite3.Error as e:
-        print(f"Error al conectar con la base de datos {db_path}: {e}")
-        raise
+    if getattr(sys, 'frozen', False):
+        # Si se ejecuta como .exe, guarda la BD junto al ejecutable
+        base_dir = Path(sys.executable).parent
+    else:
+        # Si se ejecuta como script, guarda en la raíz del proyecto
+        base_dir = Path(__file__).resolve().parent.parent
+
+    db_dir = base_dir / "database"
+    db_dir.mkdir(parents=True, exist_ok=True)  # Crea la carpeta si no existe
+
+    return str(db_dir / "refugios.db")
+
+def get_connection(db_path: str = None) -> sqlite3.Connection:
+    if db_path is None:
+        db_path = get_db_path()
+    conn = sqlite3.connect(db_path)
+    conn.execute("PRAGMA foreign_keys = ON;")
+    return conn
 
 def create_tables(conn: sqlite3.Connection) -> None:
     """
@@ -145,11 +145,13 @@ def create_tables(conn: sqlite3.Connection) -> None:
     finally:
         cursor.close()
 
-def init_db(db_path: str = DB_FILE) -> None:
+def init_db(db_path: str = None) -> None:
     """
     Inicializa la base de datos y crea las tablas.
     """
     try:
+        if db_path is None:
+            db_path = get_db_path()
         conn = get_connection(db_path)
         create_tables(conn)
         conn.close()
