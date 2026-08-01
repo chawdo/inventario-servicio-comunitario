@@ -6,6 +6,7 @@ from PyQt6.QtCore import Qt, QSize
 from PyQt6.QtGui import QFont, QIcon
 from views.refugios_view import RefugiosView
 from views.familias_view import FamiliasView
+from views.inventario_view import InventarioView
 
 class PlaceholderView(QWidget):
     """
@@ -98,15 +99,17 @@ class MainWindow(QMainWindow):
         self.refugios_view = RefugiosView()
         self.familias_view = FamiliasView()
 
+        # Instanciar la vista de la Fase 3
+        self.inventario_view = InventarioView()
+
         # Instanciar placeholders para otras fases
-        self.inventario_placeholder = PlaceholderView("Inventario y Categorías")
         self.solicitudes_placeholder = PlaceholderView("Solicitudes Semanales")
         self.reportes_placeholder = PlaceholderView("Reportes Excel")
 
         # Añadir al stacked widget
         self.stacked_widget.addWidget(self.refugios_view)
         self.stacked_widget.addWidget(self.familias_view)
-        self.stacked_widget.addWidget(self.inventario_placeholder)
+        self.stacked_widget.addWidget(self.inventario_view)
         self.stacked_widget.addWidget(self.solicitudes_placeholder)
         self.stacked_widget.addWidget(self.reportes_placeholder)
 
@@ -127,3 +130,7 @@ class MainWindow(QMainWindow):
         # por si se acaba de registrar un refugio nuevo.
         if index == 1:
             self.familias_view.cargar_combo_refugios()
+        # Si se cambia a la vista de inventario, refrescar categorías e inventario
+        elif index == 2:
+            self.inventario_view.cargar_categorias_combo()
+            self.inventario_view.cargar_inventario()
