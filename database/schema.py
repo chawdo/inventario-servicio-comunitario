@@ -1,14 +1,25 @@
 import sqlite3
 import os
+import sys
+from pathlib import Path
 from typing import Optional
 
-DB_FILE = os.path.join(os.path.dirname(__file__), "refugios.db")
+if getattr(sys, 'frozen', False):
+    db_dir = Path(sys.executable).parent / 'database'
+else:
+    db_dir = Path(__file__).parent.parent / 'database'
+
+db_dir = db_dir.resolve()
+DB_FILE = str(db_dir / "refugios.db")
 
 def get_connection(db_path: str = DB_FILE) -> sqlite3.Connection:
     """
     Establece conexión a la base de datos SQLite activando PRAGMA foreign_keys = ON;.
     """
     try:
+        if db_path != ":memory:":
+            parent_dir = Path(db_path).parent
+            os.makedirs(parent_dir, exist_ok=True)
         conn = sqlite3.connect(db_path)
         conn.execute("PRAGMA foreign_keys = ON;")
         return conn
