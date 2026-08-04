@@ -2,7 +2,7 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QTableWidget, QTableWidgetItem, QHeaderView,
     QFormLayout, QMessageBox, QGroupBox, QComboBox, QDoubleSpinBox,
-    QDialog, QSplitter
+    QDialog, QSplitter, QFileDialog
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor, QFont
@@ -121,10 +121,17 @@ class InventarioView(QWidget):
         )
         self.btn_refrescar.clicked.connect(self.cargar_inventario)
 
+        self.btn_exportar = QPushButton("Exportar a Excel")
+        self.btn_exportar.setStyleSheet(
+            "background-color: #2E7D32; color: white; font-weight: bold; padding: 8px 12px;"
+        )
+        self.btn_exportar.clicked.connect(self.exportar_excel)
+
         top_layout.addWidget(lbl_modulo)
         top_layout.addStretch()
         top_layout.addWidget(self.btn_gestionar_categorias)
         top_layout.addWidget(self.btn_refrescar)
+        top_layout.addWidget(self.btn_exportar)
         main_layout.addLayout(top_layout)
 
         # ------------------ SPLITTER PRINCIPAL ------------------
@@ -443,3 +450,24 @@ class InventarioView(QWidget):
             QMessageBox.warning(self, "Validación", str(ve))
         except Exception as e:
             QMessageBox.critical(self, "Error", f"No se pudo guardar el producto: {e}")
+
+    def exportar_excel(self):
+        """
+        Abre un diálogo de guardado y llama al controlador para exportar el inventario a Excel.
+        """
+        default_filename = "Inventario_Global.xlsx"
+        filepath, _ = QFileDialog.getSaveFileName(
+            self,
+            "Guardar Inventario a Excel",
+            default_filename,
+            "Archivos de Excel (*.xlsx)"
+        )
+
+        if not filepath:
+            return
+
+        try:
+            InventarioController.exportar_a_excel(filepath)
+            QMessageBox.information(self, "Éxito", f"Inventario exportado exitosamente a:\n{filepath}")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"No se pudo exportar el inventario a Excel: {e}")
