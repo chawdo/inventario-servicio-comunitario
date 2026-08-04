@@ -105,6 +105,9 @@ class ReporteController:
                     "Disponibilidad en Inventario (Sí / No)": en_inventario or "No"
                 })
 
+            # Ordenar primero por Código Familia, y luego todos los "Sí" antes que "No" en Disponibilidad
+            reporte.sort(key=lambda x: (x["Código Familia"], 0 if x["Disponibilidad en Inventario (Sí / No)"] == "Sí" else 1))
+
             return reporte
         except sqlite3.Error as e:
             print(f"Error al obtener datos de reporte: {e}")
@@ -162,6 +165,13 @@ class ReporteController:
             data_alignment_center = Alignment(horizontal="center", vertical="center")
             data_alignment_left = Alignment(horizontal="left", vertical="center")
 
+            # Fills y Fonts para Disponibilidad
+            si_fill = PatternFill(start_color="D4EDDA", end_color="D4EDDA", fill_type="solid")
+            si_font = Font(name="Arial", size=10, color="155724")
+
+            no_fill = PatternFill(start_color="F8D7DA", end_color="F8D7DA", fill_type="solid")
+            no_font = Font(name="Arial", size=10, color="721C24")
+
             # Centrar ciertas columnas como Semana, Código, Total Integrantes, Unidad, Disponibilidad
             center_columns = {1, 3, 5, 9, 10}
 
@@ -175,6 +185,15 @@ class ReporteController:
                         cell.alignment = data_alignment_center
                     else:
                         cell.alignment = data_alignment_left
+
+                    # Aplicar estilos de color específicos para la columna Disponibilidad
+                    if col_idx == 10:
+                        if cell.value == "Sí":
+                            cell.fill = si_fill
+                            cell.font = si_font
+                        elif cell.value == "No":
+                            cell.fill = no_fill
+                            cell.font = no_font
 
             # Ajuste automático del ancho de las columnas
             for col in worksheet.columns:
