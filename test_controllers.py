@@ -620,6 +620,128 @@ class TestControllers(unittest.TestCase):
         self.assertEqual(datos[0]["Total Integrantes"], 3)
         self.assertEqual(datos[0]["Resumen Demográfico"], "2M / 1F (1 Niño, 2 Adultos)")
 
+    def test_exportar_inventario_excel(self):
+        # 1. Registrar categoría y producto de prueba
+        cat_id = InventarioController.crear_categoria("Medicinas", "Salud")
+        prod_id = InventarioController.crear_producto(
+            categoria_id=cat_id,
+            nombre="Paracetamol",
+            empaque_unidad="Caja",
+            tamano_unidad_peso=1.0,
+            unidad_medida="unidades",
+            stock_unidades=100.0,
+            precio_unidad=0.50
+        )
+
+        import tempfile
+        import os
+        import pandas as pd
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            temp_excel_path = os.path.join(tmpdir, "inventario_test.xlsx")
+            InventarioController.exportar_a_excel(temp_excel_path)
+
+            # Verificar que el archivo existe y tiene un tamaño mayor que cero
+            self.assertTrue(os.path.exists(temp_excel_path))
+            self.assertTrue(os.path.getsize(temp_excel_path) > 0)
+
+            # Cargar con pandas para verificar su estructura
+            df_loaded = pd.read_excel(temp_excel_path)
+            self.assertTrue(len(df_loaded) >= 1)
+            self.assertEqual(df_loaded.iloc[0]["Producto"], "Paracetamol")
+            self.assertEqual(df_loaded.iloc[0]["Categoría"], "Medicinas")
+            self.assertEqual(df_loaded.iloc[0]["Stock Disponible"], 100.0)
+
+    def test_reporte_sorting_and_styling(self):
+        # 1. Setup refugio, familia, integrantes, categoría, producto y semana
+        ref_id = RefugioController.crear_refugio("Refugio Sorting", "Calle Sorting", "Ana", 100)
+        fam_id = FamiliaController.crear_familia(ref_id, "FAM-SRT", "Familia de Ordenamiento")
+
+        FamiliaController.agregar_integrante(fam_id, "Ana", "Díaz", 35, "F", "")
+
+        cat_id = InventarioController.crear_categoria("Varios", "Misceláneos")
+        prod_id1 = InventarioController.crear_producto(
+            categoria_id=cat_id,
+            nombre="Jabón",
+            empaque_unidad="Barra",
+            tamano_unidad_peso=0.2,
+            unidad_medida="kg",
+            stock_unidades=50.0,
+            precio_unidad=1.00
+        )
+        prod_id2 = InventarioController.crear_producto(
+            categoria_id=cat_id,
+            nombre="Cepillo",
+            empaque_unidad="Caja",
+            tamano_unidad_peso=0.1,
+            unidad_medida="kg",
+            stock_unidades=50.0,
+            precio_unidad=2.00
+        )
+
+        sem_id = SolicitudController.crear_semana("Semana Sorting", "2026-08-01", "2026-08-07")
+
+        # 2. Agregar ítems de solicitud con mezcla de en_inventario (Sí y No)
+        # El orden en el que se envían no importa, el reporte debe ordenarlos para que los "Sí" salgan primero.
+        items = [
+            {
+                "producto_id": None,
+                "nombre_producto_manual": "Item Manual A",
+                "cantidad_solicitada": 10.0,
+                "unidad_medida_solicitada": "unidades",
+                "en_inventario": False
+            },
+            {
+                "producto_id": prod_id1,
+                "nombre_producto_manual": None,
+                "cantidad_solicitada": 5.0,
+                "unidad_medida_solicitada": "kg",
+                "en_inventario": True
+            },
+            {
+                "producto_id": None,
+                "nombre_producto_manual": "Item Manual B",
+                "cantidad_solicitada": 2.0,
+                "unidad_medida_solicitada": "unidades",
+                "en_inventario": False
+            },
+            {
+                "producto_id": prod_id2,
+                "nombre_producto_manual": None,
+                "cantidad_solicitada": 3.0,
+                "unidad_medida_solicitada": "kg",
+                "en_inventario": True
+            }
+        ]
+
+        SolicitudController.crear_solicitud_con_detalles(
+            semana_id=sem_id,
+            familia_id=fam_id,
+            observaciones="Pedido Mezclado",
+            items=items
+        )
+
+        # 3. Obtener el reporte y verificar el ordenamiento: Sí, Sí, No, No
+        datos = ReporteController.obtener_datos_reporte(semana_id=sem_id)
+        self.assertEqual(len(datos), 4)
+
+        # Los primeros dos elementos deben ser "Sí"
+        self.assertEqual(datos[0]["Disponibilidad en Inventario (Sí / No)"], "Sí")
+        self.assertEqual(datos[1]["Disponibilidad en Inventario (Sí / No)"], "Sí")
+
+        # Los siguientes dos deben ser "No"
+        self.assertEqual(datos[2]["Disponibilidad en Inventario (Sí / No)"], "No")
+        self.assertEqual(datos[3]["Disponibilidad en Inventario (Sí / No)"], "No")
+
+        # 4. Probar exportación a Excel para asegurar que el coloreado no tenga fallos
+        import tempfile
+        import os
+        with tempfile.TemporaryDirectory() as tmpdir:
+            temp_excel_path = os.path.join(tmpdir, "reporte_sorting_test.xlsx")
+            ReporteController.exportar_a_excel(semana_id=sem_id, refugio_id=None, filepath=temp_excel_path)
+            self.assertTrue(os.path.exists(temp_excel_path))
+            self.assertTrue(os.path.getsize(temp_excel_path) > 0)
+
 
 if __name__ == "__main__":
     unittest.main()

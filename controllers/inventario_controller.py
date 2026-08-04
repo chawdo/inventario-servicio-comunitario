@@ -1,4 +1,5 @@
 import sqlite3
+import pandas as pd
 from typing import List, Dict, Any, Optional
 from database.schema import get_connection
 
@@ -40,6 +41,110 @@ class InventarioController:
         finally:
             cursor.close()
             conn.close()
+
+    @staticmethod
+    def exportar_a_excel(filepath: str) -> None:
+        """
+        Exporta el inventario global a un archivo Excel (.xlsx) con un formato
+        limpio, encabezados estilizados y auto-ajuste de columnas.
+        """
+        # 1. Obtener todos los productos
+        productos = InventarioController.obtener_todos_productos()
+
+        # 2. Definir las columnas y el orden para el Excel
+        columnas = [
+            "ID", "Categoría", "Producto", "Presentación",
+            "Tamaño/Peso Unidad", "Unidad", "Stock Disponible",
+            "Precio Unidad", "Precio Kg/L"
+        ]
+
+        # 3. Transformar los diccionarios a una estructura adecuada para DataFrame
+        datos = []
+        for p in productos:
+            datos.append({
+                "ID": p["id"],
+                "Categoría": p["categoria_nombre"],
+                "Producto": p["nombre"],
+                "Presentación": p["empaque_unidad"],
+                "Tamaño/Peso Unidad": p["tamano_unidad_peso"],
+                "Unidad": p["unidad_medida"],
+                "Stock Disponible": p["stock_unidades"],
+                "Precio Unidad": p["precio_unidad"],
+                "Precio Kg/L": p["precio_kilo_litro"]
+            })
+
+        df = pd.DataFrame(datos, columns=columnas)
+
+        # 4. Escribir usando pandas y openpyxl
+        with pd.ExcelWriter(filepath, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name="Inventario")
+
+            workbook = writer.book
+            worksheet = writer.sheets["Inventario"]
+
+            # Estilos de openpyxl
+            from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+
+            header_fill = PatternFill(start_color="00897B", end_color="00897B", fill_type="solid") # Turquesa oscuro
+            header_font = Font(name="Arial", size=11, bold=True, color="FFFFFF")
+            header_alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+            thin_border_side = Side(border_style="thin", color="CCCCCC")
+            thin_border = Border(left=thin_border_side, right=thin_border_side, top=thin_border_side, bottom=thin_border_side)
+
+            # Aplicar estilos a la cabecera (Fila 1)
+            for col_idx in range(1, len(columnas) + 1):
+                cell = worksheet.cell(row=1, column=col_idx)
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = header_alignment
+                cell.border = thin_border
+
+            # Aplicar estilos a las celdas de datos
+            data_font = Font(name="Arial", size=10)
+            align_center = Alignment(horizontal="center", vertical="center")
+            align_left = Alignment(horizontal="left", vertical="center")
+            align_right = Alignment(horizontal="right", vertical="center")
+
+            # Mapear alineaciones por columna
+            # ID: center, Categoría: left, Producto: left, Presentación: left,
+            # Tamaño: right, Unidad: center, Stock: right, Precio U: right, Precio Kg/L: right
+            alignments = {
+                1: align_center,  # ID
+                2: align_left,    # Categoría
+                3: align_left,    # Producto
+                4: align_left,    # Presentación
+                5: align_right,   # Tamaño/Peso Unidad
+                6: align_center,  # Unidad
+                7: align_right,   # Stock Disponible
+                8: align_right,   # Precio Unidad
+                9: align_right    # Precio Kg/L
+            }
+
+            for row_idx in range(2, len(df) + 2):
+                for col_idx in range(1, len(columnas) + 1):
+                    cell = worksheet.cell(row=row_idx, column=col_idx)
+                    cell.font = data_font
+                    cell.border = thin_border
+                    cell.alignment = alignments.get(col_idx, align_left)
+
+                    # Formateo de números si corresponde
+                    if col_idx in {5, 7, 8, 9}:
+                        cell.number_format = "0.00"
+
+            # Ajuste automático del ancho de las columnas
+            for col in worksheet.columns:
+                max_len = 0
+                col_letter = col[0].column_letter
+                for cell in col:
+                    if cell.value is not None:
+                        # Si es flotante/número, formatearlo para el cálculo de longitud
+                        if isinstance(cell.value, float):
+                            val_str = f"{cell.value:.2f}"
+                        else:
+                            val_str = str(cell.value)
+                        max_len = max(max_len, len(val_str))
+                worksheet.column_dimensions[col_letter].width = max(max_len + 3, 12)
 
     @staticmethod
     def crear_categoria(nombre: str, descripcion: str) -> int:
